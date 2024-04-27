@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="http-listener-config" doc:name="HTTP Listener config" doc:id="64f38b0e-c65a-450e-b4cf-1eb9146be5a0" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:request-config name="http-request-config-downstream-api" doc:name="HTTP Request configuration" doc:id="94f3b813-16f9-41ac-9ab8-436335202032" >
+		<http:request-connection host="localhost" port="8082" />
+	</http:request-config>
+	<flow name="circuitbreakerFlow" doc:id="997973c2-f155-4f58-86ba-0fa572291230" >
+		<http:listener doc:name="Listener (GET /mainflow)" doc:id="ed35b682-1242-45ac-9f62-dcd30146eb10" config-ref="http-listener-config" path="/mainflow"/>
+		<logger level="INFO" doc:name="Log Entry" doc:id="7315c8e7-9feb-4592-ab68-0cb290b9995f" message="Log Entry"/>
+		<try doc:name="Try" doc:id="f85707d4-4367-460c-829f-206bc2cab266" >
+			<http:request method="GET" doc:name="Request" doc:id="185aec68-8b8b-4040-b15c-09f92bc1d485" config-ref="http-request-config-downstream-api" path="/downstream/api" />
+			<ee:transform doc:name="Prepare Response" doc:id="78309144-6c32-48fe-98d0-82ca4deacfd8">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Response returned from external system"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="81564e67-dadd-46ca-be7b-eb969889fba0" type="HTTP:CONNECTIVITY">
+					<async doc:name="Async" doc:id="daad38c7-6dec-4dcc-8722-c253ffb672e5" >
+						<flow-ref doc:name="circuit-breaker-subflow" doc:id="b153a73b-73a6-46d5-baca-a567e12ab2f7" name="circuit-breaker-subflow"/>
+					</async>
+					<ee:transform doc:name="Prepare Response" doc:id="c4c4cc24-dff4-431b-b937-a563eee1b31f" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Error response returned from External System; Proceeding to Stop the main flow using circuit breaker"
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<logger level="INFO" doc:name="Log Exit" doc:id="0d3d547c-08f7-4406-9873-f29d073d2fa2" message="Log Exit" />
+	</flow>
+	<flow name="mule-circuit-breaker-implementationFlow" doc:id="be6d2b37-6471-4823-88f0-a29c9700c311">
+		<http:listener doc:name="Listener (GET /toggle)" doc:id="7a0567e0-2f50-4d25-a0e7-dfb63196206f" config-ref="http-listener-config" path="/toggle" />
+		<logger level="INFO" doc:name="Log Entry" doc:id="c8123ce2-84dc-461c-87da-b56194e24d87" message="Log Entry" />
+		<scripting:execute engine="Groovy" doc:name="Execute" doc:id="97860db4-e850-487e-9407-20e22e71a445">
+			<scripting:code><![CDATA[flow = registry.lookupByName("circuitbreakerFlow").get();
+if (flow.isStarted())
+	flow.stop()
+else
+	flow.start()]]></scripting:code>
+		</scripting:execute>
+		<ee:transform doc:name="Prepare Response" doc:id="57d56ba2-c7da-426c-b530-d0daca7affc8">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Successfully enabled circuitbreakerFlow"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log Exit" doc:id="2e80c798-fbe5-47aa-855d-2d3235276814" message="Log Exit" />
+	</flow>
+	<sub-flow name="circuit-breaker-subflow" doc:id="1c413577-f3b1-4d2c-8a03-5042b81040aa" >
+		<scripting:execute engine="Groovy" doc:name="Execute" doc:id="adddf2b7-77d8-4e84-ad94-43ea8660e1eb" >
+			<scripting:code ><![CDATA[flow = registry.lookupByName("circuitbreakerFlow").get();
+if (flow.isStarted())
+	flow.stop()]]></scripting:code>
+		</scripting:execute>
+	</sub-flow>
+</mule>
