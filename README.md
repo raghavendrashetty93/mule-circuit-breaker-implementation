@@ -13,20 +13,20 @@ Download and Install Grrovy Module from Exchange into Anypoint Studio.
 - Create a flow named 'circuitbreakerFlow' which invokes an external endpoint. In this HTTP Requestor calls an unavailable endpoint inorder to demonstrate circuit breaker.
   On HTTP:CONNECTIVITY error it invokes error handler which in turn executes below Grrovy script asynchronously.
   **Groovy Script:**
-  ```
+```
     flow = registry.lookupByName("circuitbreakerFlow").get();
     if (flow.isStarted())
   	  flow.stop()
-   ```
+```
  - Create another flow with listener which executes below Grrovy script to toggle back the state.
   **Groovy Script:**
-  ```
+```
     flow = registry.lookupByName("circuitbreakerFlow").get();
     if (flow.isStarted())
   	  flow.stop()
     else
       flow.start()
-   ```
+```
 ## Working
 #### Main Endpoint
 http://localhost:8081/mainflow 
